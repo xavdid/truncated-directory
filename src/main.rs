@@ -2,79 +2,99 @@ use std::{env::current_dir, path::PathBuf};
 
 use home::home_dir as get_home_dir;
 
-use truncated_directory::filesystem::{get_git_repo, shift_path_segments};
-// use truncated_directory::{make_bold_cyan, make_purple, print_purple};
+mod filesystem;
+mod formatting;
 
-#[must_use] pub fn make_purple(s: &str) -> String {
-    format!("%F{{13}}{s}%f")
-}
+use formatting::{format_non_repo_string, format_repo_string};
 
-#[must_use] pub fn make_bold_cyan(s: &str) -> String {
-    format!("%B%F{{14}}/{s}%f%b")
-}
-
-pub fn print_purple(s: &str) {
-    print!("{}", make_purple(s));
+fn get_truncated_path(
+    cwd: &PathBuf,
+    home_dir: &PathBuf,
+    maybe_repo_root: Option<PathBuf>,
+) -> String {
+    match maybe_repo_root {
+        Some(git_root) => format_repo_string(cwd, git_root),
+        None => format_non_repo_string(cwd, home_dir),
+    }
 }
 
 fn main() {
-    let cwd = current_dir().expect("err fetching cwd");
+    print!(
+        "{}",
+        get_truncated_path(
+            &current_dir().expect("err fetching cwd"),
+            &get_home_dir().expect("unable to get home dir"),
+            filesystem::get_git_repo()
+        )
+    );
+}
 
-    if let Some(git_root) = get_git_repo() {
-        let repo_name = git_root
-            .file_name()
-            .expect("unable to extract directory name from git_root");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use colored::Colorize;
+    #[cfg(test)]
+    use pretty_assertions::assert_eq;
 
-        let purple_git_root = make_purple(repo_name.to_str().unwrap());
+    macro_rules! root_tests {
+        ($($name:ident: $value:expr,)+) => {
+          $(
+            #[test]
+            fn $name() {
+                let (cwd, maybe_repo, expected) = $value;
+                assert_eq!(
+                  get_truncated_path(
+                    &PathBuf::from(cwd),
+                    &PathBuf::from("/Users/xavdid"), // home
+                    maybe_repo
+                  ),
+                  expected
+                );
+              }
+            )*
+          };
+      }
 
-        if git_root == cwd {
-            print!("{purple_git_root}");
-            return;
-        }
-
-        let sub_path = cwd
-            .strip_prefix(git_root)
-            .expect("unable to strip git root from cwd");
-
-        let sub_path_components = sub_path.components().count();
-
-        if sub_path_components <= 2 {
-            let cyan_sub_path = make_bold_cyan(&sub_path.display().to_string());
-            print!("{purple_git_root}{cyan_sub_path}");
-            return;
-        }
-
-        let truncated_path = shift_path_segments(sub_path, sub_path_components - 2);
-
-        let cyan_truncated_path = make_bold_cyan(&format!("…/{truncated_path}"));
-
-        print!("{purple_git_root}{cyan_truncated_path}");
-    } else {
-        let home_dir = get_home_dir().expect("unable to get home dir");
-
-        if home_dir == cwd {
-            print_purple("🏠 ~");
-            return;
-        }
-
-        // clean if we're under home
-        let cwd = if cwd.starts_with(&home_dir) {
-            let mut cleaned = PathBuf::from("~");
-            cleaned.push(
-                cwd.strip_prefix(&home_dir)
-                    .expect("unable to strip homedir prefix from cwd"),
-            );
-            cleaned
-        } else {
-            cwd
-        };
-
-        let num_parts = cwd.components().count();
-
-        let slice_from = if num_parts > 3 { num_parts - 3 } else { 0 };
-
-        let cleaned_path = shift_path_segments(&cwd, slice_from);
-
-        print_purple(&cleaned_path);
-    }
+    root_tests!(
+        root_home: (
+            "/Users/xavdid",
+            None,
+            "🏠 ~".purple().bold().to_string()
+        ),
+        root_users: (
+            "/Users",
+            None,
+            "/Users".purple().bold().to_string()
+        ),
+        root_root: (
+            "/",
+            None,
+            "/".purple().bold().to_string()
+        ),
+        root_desktop: (
+            "/Users/xavdid/Desktop",
+            None,
+            "~/Desktop".purple().bold().to_string()
+        ),
+        root_repo_root: (
+            "/Users/xavdid/projects/cool-thing",
+            Some(PathBuf::from("/Users/xavdid/projects/cool-thing")),
+            "cool-thing".purple().bold().to_string()
+        ),
+        root_repo_sub: (
+            "/Users/xavdid/projects/cool-thing/sub",
+            Some(PathBuf::from("/Users/xavdid/projects/cool-thing")),
+            format!("{}/{}", "cool-thing".purple().bold(), "sub".cyan().bold()),
+        ),
+        root_repo_deep_sub: (
+            "/Users/xavdid/projects/cool-thing/one/last/time/final",
+            Some(PathBuf::from("/Users/xavdid/projects/cool-thing")),
+            format!("{}/{}", "cool-thing".purple().bold(), "…/time/final".cyan().bold()),
+        ),
+        root_deep_len: (
+            "/Users/xavdid/Desktop/a/b/c/d/",
+            None,
+            "b/c/d".purple().bold().to_string(),
+        ),
+    );
 }
