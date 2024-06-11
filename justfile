@@ -2,7 +2,7 @@
   just --list
 
 # compile for release and move to a directory
-@build dest="~/bin":
+@build dest="~/bin/":
   cargo build --release
   cp target/release/truncated-directory {{dest}}
 
