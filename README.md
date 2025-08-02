@@ -6,6 +6,8 @@ This is a little Rust CLI use to display the path in my [starship](https://stars
 
 It's not available in a package manager, so just clone and compile it on your own. You can point starship it, wherever it lives. See [how I do it](https://github.com/xavdid/dotfiles/blob/ba7b811467cf2d27659670e326a85470981e616b/config/starship.toml#L60-L66) if you want an example of usage.
 
+To compile, run `just build` (after installing [just](https://github.com/casey/just)). By default it'll dump the binary into `~/bin` but you can also pass a different directory (e.g. `just build some/directory`).
+
 ## Examples
 
 Here's how each of the following directories is displayed:
